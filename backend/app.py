@@ -97,5 +97,7 @@ def test_db():
         return f"Database error: {str(e)}"
 
 # Run the application
+# Modify the last line where you run the app:
+
 if __name__ == '__main__':
-    socketio.run(app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
