@@ -1,0 +1,94 @@
+# ---------------------------
+# Python / Flask (Back-end)
+# ---------------------------
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+*.eggs/
+*.env
+*.venv
+.env
+.venv
+env/
+venv/
+instance/
+db.sqlite3
+*.log
+
+# PyInstaller
+*.spec
+
+# Coverage reports
+htmlcov/
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+.cache
+.pytest_cache/
+
+# Migrations
+migrations/
+
+# ---------------------------
+# Node / React (Front-end)
+# ---------------------------
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+build/
+dist/
+*.tgz
+
+# dotenv environment files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# ---------------------------
+# Docker / Deployment
+# ---------------------------
+
+# Docker
+*.pid
+*.pid.lock
+
+# Terraform / Infrastructure
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Ansible
+*.retry
+*.vault
+
+# Logs
+*.log
+
+# Optional: secrets or certs
+secrets/
+certs/
+*.pem
+*.crt
+*.key

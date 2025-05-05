@@ -1,0 +1,134 @@
+import React, { useState, useEffect } from 'react';
+import io from 'socket.io-client';
+import Login from './components/Login';
+import Register from './components/Register';
+import Chat from './components/Chat';
+import './App.css';
+
+const API_URL = 'http://localhost:5000';
+let socket;
+
+function App() {
+const [user, setUser] = useState(null);
+const [isAuthenticated, setIsAuthenticated] = useState(false);
+const [showRegister, setShowRegister] = useState(false);
+
+useEffect(() => {
+    // Check if user is already logged in
+    const storedUser = localStorage.getItem('secureChat_user');
+    if (storedUser) {
+    const parsedUser = JSON.parse(storedUser);
+    setUser(parsedUser);
+    setIsAuthenticated(true);
+    
+      // Connect to WebSocket
+    connectSocket(parsedUser.session_id);
+    }
+    
+    return () => {
+    if (socket) {
+        socket.disconnect();
+    }
+    };
+}, []);
+
+const connectSocket = (sessionId) => {
+    socket = io(API_URL, {
+    query: { session_id: sessionId }
+    });
+    
+    socket.on('connect', () => {
+    console.log('Connected to WebSocket server');
+    });
+    
+    socket.on('disconnect', () => {
+    console.log('Disconnected from WebSocket server');
+    });
+};
+
+const handleLogin = async (credentials) => {
+    try {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+        'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+    });
+    
+    if (!response.ok) {
+        throw new Error('Login failed');
+    }
+    
+    const data = await response.json();
+    localStorage.setItem('secureChat_user', JSON.stringify(data));
+    setUser(data);
+    setIsAuthenticated(true);
+    
+      // Connect to WebSocket
+    connectSocket(data.session_id);
+    } catch (error) {
+    console.error('Login error:', error);
+    alert('Login failed: ' + error.message);
+    }
+};
+
+const handleRegister = async (userData) => {
+    try {
+    const response = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+        'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+    });
+    
+    if (!response.ok) {
+        throw new Error('Registration failed');
+    }
+    
+    setShowRegister(false);
+    alert('Registration successful! Please login.');
+    } catch (error) {
+    console.error('Registration error:', error);
+    alert('Registration failed: ' + error.message);
+    }
+};
+
+const handleLogout = () => {
+    localStorage.removeItem('secureChat_user');
+    setUser(null);
+    setIsAuthenticated(false);
+    
+    if (socket) {
+    socket.disconnect();
+    }
+};
+
+return (
+    <div className="App">
+    <header className="App-header">
+        <h1>🛡️ SecureChat</h1>
+        {isAuthenticated && (
+        <button onClick={handleLogout} className="logout-button">
+            Logout
+        </button>
+        )}
+    </header>
+    
+    <main>
+        {!isAuthenticated ? (
+        showRegister ? (
+            <Register onRegister={handleRegister} onToggle={() => setShowRegister(false)} />
+        ) : (
+            <Login onLogin={handleLogin} onToggle={() => setShowRegister(true)} />
+        )
+        ) : (
+        <Chat user={user} socket={socket} apiUrl={API_URL} />
+        )}
+    </main>
+    </div>
+);
+}
+
+export default App;
