@@ -1,11 +1,10 @@
 from flask import Blueprint, request, jsonify
 import datetime
 import uuid
+from models.message import Message
+from models.user import db, User
 
 messages_bp = Blueprint('messages', __name__)
-
-# In-memory message store (for users who opt-in to history)
-message_store = {}
 
 @messages_bp.route('/history/<recipient_id>', methods=['GET'])
 def get_message_history(recipient_id):
@@ -14,28 +13,45 @@ def get_message_history(recipient_id):
     if not user_id:
         return jsonify({'error': 'User ID is required'}), 400
     
-    conversation_id = sorted([user_id, recipient_id])
-    conversation_key = f"{conversation_id[0]}:{conversation_id[1]}"
+    # Verify both users exist
+    user = User.query.get(user_id)
+    recipient = User.query.get(recipient_id)
     
-    messages = message_store.get(conversation_key, [])
+    if not user or not recipient:
+        return jsonify({'error': 'Invalid user or recipient ID'}), 404
     
-    return jsonify(messages), 200
+    # Query database for messages between users (in either direction)
+    messages = Message.query.filter(
+        ((Message.sender_id == user_id) & (Message.recipient_id == recipient_id)) | 
+        ((Message.sender_id == recipient_id) & (Message.recipient_id == user_id))
+    ).order_by(Message.timestamp).all()
+    
+    # Convert to dictionary format
+    message_list = [message.to_dict() for message in messages]
+    
+    return jsonify(message_list), 200
 
 def store_message_in_db(data):
-    """Store encrypted message in database (only if not in anonymous mode)"""
-    sender_id = data.get('sender_id')
-    recipient_id = data.get('recipient_id')
-    encrypted_message = data.get('encrypted_message')
-    
-    conversation_id = sorted([sender_id, recipient_id])
-    conversation_key = f"{conversation_id[0]}:{conversation_id[1]}"
-    
-    if conversation_key not in message_store:
-        message_store[conversation_key] = []
-    
-    message_store[conversation_key].append({
-        'id': str(uuid.uuid4()),
-        'sender_id': sender_id,
-        'encrypted_message': encrypted_message,
-        'timestamp': datetime.datetime.utcnow().isoformat()
-    })
+    """Store encrypted message in database"""
+    try:
+        sender_id = data.get('sender_id')
+        recipient_id = data.get('recipient_id')
+        encrypted_message = data.get('encrypted_message')
+        
+        # Create new message
+        message = Message(
+            id=str(uuid.uuid4()),
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            encrypted_message=encrypted_message
+        )
+        
+        # Save to database
+        db.session.add(message)
+        db.session.commit()
+        
+        return True
+    except Exception as e:
+        print(f"Error storing message: {str(e)}")
+        db.session.rollback()
+        return False
