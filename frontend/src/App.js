@@ -17,12 +17,12 @@ useEffect(() => {
     // Check if user is already logged in
     const storedUser = localStorage.getItem('secureChat_user');
     if (storedUser) {
-    const parsedUser = JSON.parse(storedUser);
-    setUser(parsedUser);
-    setIsAuthenticated(true);
-    
-      // Connect to WebSocket
-    connectSocket(parsedUser.session_id);
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+        
+        // Connect to WebSocket
+        connectSocket(parsedUser.session_id, parsedUser.user_id);
     }
     
     return () => {
@@ -32,17 +32,16 @@ useEffect(() => {
     };
 }, []);
 
-const connectSocket = (sessionId) => {
+const connectSocket = (sessionId, userId) => {
     socket = io(API_URL, {
-    query: { session_id: sessionId }
+    query: { 
+        session_id: sessionId,
+        user_id: userId
+    }
     });
     
     socket.on('connect', () => {
-    console.log('Connected to WebSocket server');
-    });
-    
-    socket.on('disconnect', () => {
-    console.log('Disconnected from WebSocket server');
+    console.log('Connected to WebSocket server with user ID:', userId);
     });
 };
 
@@ -66,7 +65,7 @@ const handleLogin = async (credentials) => {
     setIsAuthenticated(true);
     
       // Connect to WebSocket
-    connectSocket(data.session_id);
+    connectSocket(data.session_id, data.user_id);
     } catch (error) {
     console.error('Login error:', error);
     alert('Login failed: ' + error.message);

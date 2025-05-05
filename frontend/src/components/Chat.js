@@ -97,19 +97,29 @@ function Chat({ user, socket, apiUrl }) {
     return CryptoJS.AES.decrypt(encryptedText, 'secret-key').toString(CryptoJS.enc.Utf8);
   };
 
-  const sendMessage = () => {
-    if (!message.trim() || !selectedUser) return;
-    
-    // Encrypt the message
-    const encryptedMessage = encryptMessage(message);
-    
-    // Prepare message data
-    const messageData = {
-      sender_id: user.id,
-      recipient_id: selectedUser.id,
-      encrypted_message: encryptedMessage,
-      store_history: !isAnonymousMode, // Don't store if in anonymous mode
-    };
+const sendMessage = () => {
+  if (!message.trim() || !selectedUser) return;
+  
+  // Add debug logs
+  console.log("Current user:", user);
+  console.log("Selected user:", selectedUser);
+  
+  // Encrypt the message
+  const encryptedMessage = encryptMessage(message);
+  
+  // Prepare message data
+  const messageData = {
+    sender_id: user.user_id || user.id, // Try both possible fields
+    recipient_id: selectedUser.id,
+    encrypted_message: encryptedMessage,
+    store_history: !isAnonymousMode, // Don't store if in anonymous mode
+  };
+  
+  console.log("Sending message data:", messageData);
+  
+  // Send through WebSocket
+  socket.emit('message', messageData);
+
     
     // Send through WebSocket
     socket.emit('message', messageData);

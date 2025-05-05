@@ -38,6 +38,21 @@ def store_message_in_db(data):
         recipient_id = data.get('recipient_id')
         encrypted_message = data.get('encrypted_message')
         
+        # Validate required fields
+        if not sender_id:
+            print("ERROR: sender_id is missing or null")
+            return False
+            
+        if not recipient_id:
+            print("ERROR: recipient_id is missing or null")
+            return False
+            
+        if not encrypted_message:
+            print("ERROR: encrypted_message is missing or null")
+            return False
+        
+        print(f"Creating message with sender_id: {sender_id}, recipient_id: {recipient_id}")
+        
         # Create new message
         message = Message(
             id=str(uuid.uuid4()),
