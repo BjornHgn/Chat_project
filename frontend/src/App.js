@@ -5,7 +5,7 @@ import Register from './components/Register';
 import Chat from './components/Chat';
 import './App.css';
 
-const API_URL = 'http://localhost:5000';
+const API_URL = 'http://10.33.75.205:5000';
 let socket;
 
 function App() {

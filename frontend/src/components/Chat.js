@@ -14,10 +14,22 @@ function Chat({ user, socket, apiUrl }) {
     // Fetch available users
     fetchUsers();
     
+    // Listen for incoming messages - move this to a separate useEffect
+  }, []);
+  
+  // Add a new useEffect for message handling
+  useEffect(() => {
+    // Clear previous listeners to prevent duplicates
+    socket.off('message');
+    
     // Listen for incoming messages
     socket.on('message', (data) => {
-      if (data.sender_id === selectedUser?.id || data.sender_id === user.id) {
-        // Decrypt the message (in a real app, you'd use proper E2EE here)
+      console.log("Received message:", data);
+      
+      // Always process messages from the currently selected user or to you from any user
+      if (data.sender_id === selectedUser?.id || 
+          (data.recipient_id === user.id && data.sender_id !== user.id)) {
+        // Decrypt the message
         const decryptedMessage = decryptMessage(data.encrypted_message);
         
         setMessages((prevMessages) => [
@@ -35,7 +47,7 @@ function Chat({ user, socket, apiUrl }) {
     return () => {
       socket.off('message');
     };
-  }, [selectedUser]);
+  }, [selectedUser, user.id]);
 
   useEffect(() => {
     // Scroll to bottom when messages change
@@ -119,10 +131,6 @@ const sendMessage = () => {
   
   // Send through WebSocket
   socket.emit('message', messageData);
-
-    
-    // Send through WebSocket
-    socket.emit('message', messageData);
     
     // Add to local messages
     setMessages((prevMessages) => [
