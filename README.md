@@ -167,8 +167,8 @@ Interface adaptée prioritairement aux ordinateurs de bureau
 
 Ce projet a été développé par :
 
-**Hougen Bjorn**
+[**Hougen Bjorn**](https://github.com/BjornHgn)
 
-**Luu Vincent**
+[**Luu Vincent**](https://github.com/Vinchou123)
 
-**Missaoui Mathys**
+[**Missaoui Mathys**](https://github.com/mathysmissaoui)
