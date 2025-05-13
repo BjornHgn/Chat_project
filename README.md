@@ -19,6 +19,7 @@ SecureChat est une application de messagerie sécurisée utilisant le chiffremen
 ## 🛠️ Architecture Technique
 
 **Backend (Python/Flask)**
+
 Flask pour l'API REST
 
 **Flask-SocketIO** pour la communication en temps réel
@@ -32,6 +33,7 @@ Flask pour l'API REST
 **Cryptography** pour les opérations cryptographiques
 
 **Frontend (React)**
+
 React pour l'interface utilisateur
 
 **TweetNaCl** et **CryptoJS** pour le chiffrement côté client
