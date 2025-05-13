@@ -1,9 +1,21 @@
 import React, { useState } from 'react';
+import zxcvbn from 'zxcvbn';
 
 function Register({ onRegister, onToggle }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState(0);
+  const checkPasswordStrength = (password) => {
+  const result = zxcvbn(password);
+    setPasswordStrength(result.score);
+  };
+  // Update password onChange handler
+  const handlePasswordChange = (e) => {
+    const newPassword = e.target.value;
+    setPassword(newPassword);
+    checkPasswordStrength(newPassword);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -36,9 +48,19 @@ function Register({ onRegister, onToggle }) {
             type="password"
             id="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={handlePasswordChange}
             required
           />
+        </div>
+        <div className="password-strength">
+        <div className={`strength-bar strength-${passwordStrength}`}></div>
+        <div className="strength-text">
+        {passwordStrength === 0 && 'Very Weak'}
+        {passwordStrength === 1 && 'Weak'}
+        {passwordStrength === 2 && 'Fair'}
+        {passwordStrength === 3 && 'Good'}
+        {passwordStrength === 4 && 'Strong'}
+        </div>
         </div>
         <div className="form-group">
           <label htmlFor="confirmPassword">Confirm Password</label>

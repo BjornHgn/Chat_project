@@ -24,11 +24,20 @@ useEffect(() => {
         // Connect to WebSocket
         connectSocket(parsedUser.session_id, parsedUser.user_id);
     }
-    
     return () => {
     if (socket) {
         socket.disconnect();
     }
+    // Add session security enhancements
+    const cleanupSessionSecurity = enhanceSessionSecurity();
+
+    // Return combined cleanup function
+    return () => {
+    if (socket) {
+        socket.disconnect();
+    }
+    cleanupSessionSecurity();
+    };
     };
 }, []);
 
@@ -102,6 +111,55 @@ const handleLogout = () => {
     if (socket) {
     socket.disconnect();
     }
+};
+
+
+const enhanceSessionSecurity = () => {
+  // Add periodic token refresh
+  const refreshInterval = setInterval(() => {
+    if (user && user.token) {
+      refreshSession(user.token);
+    }
+  }, 15 * 60 * 1000); // Refresh every 15 minutes
+  
+  return () => clearInterval(refreshInterval);
+};
+
+const refreshSession = async (token) => {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Token refresh failed');
+    }
+    
+    const data = await response.json();
+    
+    // Update local storage and state with new token
+    const updatedUser = { ...user, token: data.token, session_id: data.session_id };
+    localStorage.setItem('secureChat_user', JSON.stringify(updatedUser));
+    setUser(updatedUser);
+    
+    // Reconnect socket with new session ID if needed
+    if (data.session_id && data.session_id !== user.session_id) {
+      if (socket) {
+        socket.disconnect();
+      }
+      connectSocket(data.session_id, user.id);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Session refresh error:', error);
+    handleLogout();
+    return false;
+  }
 };
 
 return (

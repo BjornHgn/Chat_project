@@ -85,3 +85,91 @@ def get_users():
     user_list = [user.to_dict() for user in users]
     
     return jsonify(user_list), 200
+
+@auth_bp.route('/refresh', methods=['POST'])
+def refresh_token():
+    # Get token from Authorization header
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Missing or invalid token'}), 401
+    
+    token = auth_header.split(' ')[1]
+    
+    try:
+        # Verify the token
+        payload = jwt.decode(token, 'your-secret-key', algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        
+        # Check if user exists
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Generate new token
+        new_token = jwt.encode({
+            'user_id': user.id,
+            'username': user.username,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+        }, 'your-secret-key')
+        
+        # Create a new session for WebSocket authentication
+        session_id = str(uuid.uuid4())
+        sessions[session_id] = user.id
+        
+        return jsonify({
+            'token': new_token,
+            'session_id': session_id
+        }), 200
+        
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+    
+@auth_bp.route('/users/<user_id>', methods=['GET'])
+def get_user_detail(user_id):
+    """Get a specific user's details including public key"""
+    user = User.query.get(user_id)
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+        
+    return jsonify(user.to_dict()), 200
+
+@auth_bp.route('/keys/update', methods=['POST'])
+def update_public_key():
+    """Update a user's public key"""
+    # Get token from Authorization header
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'error': 'Missing or invalid token'}), 401
+    
+    token = auth_header.split(' ')[1]
+    
+    try:
+        # Verify the token
+        payload = jwt.decode(token, 'your-secret-key', algorithms=['HS256'])
+        user_id = payload.get('user_id')
+        
+        # Check if user exists
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        # Get the public key from request body
+        data = request.get_json()
+        public_key = data.get('public_key')
+        
+        if not public_key:
+            return jsonify({'error': 'Public key is required'}), 400
+            
+        # Update user's public key
+        user.public_key = public_key
+        db.session.commit()
+        
+        return jsonify({'message': 'Public key updated successfully'}), 200
+        
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401

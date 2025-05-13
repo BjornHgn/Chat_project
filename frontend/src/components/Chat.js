@@ -1,5 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import CryptoJS from 'crypto-js';
+import { 
+  encryptMessage, 
+  decryptMessage, 
+  simplifiedEncrypt,
+  simplifiedDecrypt
+} from '../utils/encryption';
+import { 
+  getCurrentUserKeys,
+  getPublicKey,
+  storePublicKey
+} from '../utils/keyManagement';
 
 function Chat({ user, socket, apiUrl }) {
   const [users, setUsers] = useState([]);
@@ -9,6 +20,23 @@ function Chat({ user, socket, apiUrl }) {
   const [isAnonymousMode, setIsAnonymousMode] = useState(false);
   const [messageCache, setMessageCache] = useState({});
   const messagesEndRef = useRef(null);
+
+  const fetchUserPublicKey = async (userId) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/auth/users/${userId}`);
+      if (response.ok) {
+        const userData = await response.json();
+        if (userData.public_key) {
+          storePublicKey(userId, userData.public_key);
+          return userData.public_key;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching user public key:', error);
+      return null;
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -166,20 +194,68 @@ function Chat({ user, socket, apiUrl }) {
     }
   };
 
+  const signMessage = (message, key) => {
+  return CryptoJS.HmacSHA256(message, key).toString();
+};
 
-  // Rest of your code remains the same
-  const encryptMessage = (text) => {
-    // This is a simplified example. In a real app, you'd use proper E2EE
-    return CryptoJS.AES.encrypt(text, 'secret-key').toString();
+const encryptMessageForSending = async (messageText) => {
+  try {
+    // Get recipient's public key
+    let recipientPublicKey = getPublicKey(selectedUser.id);
+    
+    // If we don't have it yet, fetch it
+    if (!recipientPublicKey) {
+      recipientPublicKey = await fetchUserPublicKey(selectedUser.id);
+    }
+    
+    // If we have the public key, use proper E2EE
+    if (recipientPublicKey) {
+      const currentUserKeys = getCurrentUserKeys();
+      
+      if (currentUserKeys && currentUserKeys.privateKey) {
+        // Use proper asymmetric encryption
+        return encryptMessage(
+          messageText,
+                    recipientPublicKey, 
+          currentUserKeys.privateKey
+        );
+      }
+    }
+    
+    // Fallback to simplified encryption
+    console.warn('Using simplified encryption as fallback');
+    return simplifiedEncrypt(messageText);
+  } catch (error) {
+    console.error('Encryption error, falling back to simple encryption:', error);
+    return simplifiedEncrypt(messageText);
+  }
+};
+
+const decryptReceivedMessage = (encryptedText, senderId) => {
+  try {
+    // Get sender's public key
+    const senderPublicKey = getPublicKey(senderId);
+    const currentUserKeys = getCurrentUserKeys();
+    
+    // If we have both keys, use proper E2EE
+    if (senderPublicKey && currentUserKeys && currentUserKeys.privateKey) {
+      return decryptMessage(
+        encryptedText,
+        senderPublicKey,
+        currentUserKeys.privateKey
+      );
+    }
+    
+    // Fallback to simplified decryption
+    console.warn('Using simplified decryption as fallback');
+    return simplifiedDecrypt(encryptedText);
+  } catch (error) {
+    console.error('Decryption error, falling back to simple decryption:', error);
+    return simplifiedDecrypt(encryptedText);
+  }
   };
 
-  const decryptMessage = (encryptedText) => {
-    // This is a simplified example. In a real app, you'd use proper E2EE
-    return CryptoJS.AES.decrypt(encryptedText, 'secret-key').toString(CryptoJS.enc.Utf8);
-  };
-
-  // ... rest of the component functions and JSX ...
-const sendMessage = () => {
+const sendMessage = async () => {
   if (!message.trim() || !selectedUser) return;
   
   // Add debug logs
@@ -187,7 +263,7 @@ const sendMessage = () => {
   console.log("Selected user:", selectedUser);
   
   // Encrypt the message
-  const encryptedMessage = encryptMessage(message);
+  const encryptedMessage = await encryptMessageForSending(message);
   
   // Prepare message data
   const messageData = {
@@ -202,20 +278,20 @@ const sendMessage = () => {
   // Send through WebSocket
   socket.emit('message', messageData);
     
-    // Add to local messages
-    setMessages((prevMessages) => [
-      ...prevMessages,
-      {
-        id: Date.now().toString(),
-        sender_id: user.id,
-        text: message,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-    
-    // Clear input
-    setMessage('');
-  };
+  // Add to local messages
+  setMessages((prevMessages) => [
+    ...prevMessages,
+    {
+      id: Date.now().toString(),
+      sender_id: user.id,
+      text: message,
+      timestamp: new Date().toISOString(),
+    },
+  ]);
+  
+  // Clear input
+  setMessage('');
+};
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
