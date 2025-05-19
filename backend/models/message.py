@@ -15,6 +15,7 @@ class Message(db.Model):
         return {
             'id': self.id,
             'sender_id': self.sender_id,
+            'recipient_id': self.recipient_id,
             'encrypted_message': self.encrypted_message,
             'timestamp': self.timestamp.isoformat()
         }

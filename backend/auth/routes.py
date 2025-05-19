@@ -4,6 +4,7 @@ import datetime
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 from models.user import User, db
+from models.message import Message
 from encryption.utils import generate_keypair, serialize_public_key
 
 # Create the auth blueprint
@@ -173,3 +174,38 @@ def update_public_key():
         return jsonify({'error': 'Token has expired'}), 401
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Invalid token'}), 401
+
+@auth_bp.route('/history/<recipient_id>', methods=['GET'])
+def get_message_history(recipient_id):
+    user_id = request.args.get('user_id')
+    
+    if not user_id:
+        return jsonify({'error': 'User ID is required'}), 400
+    
+    # Verify both users exist
+    user = User.query.get(user_id)
+    recipient = User.query.get(recipient_id)
+    
+    if not user or not recipient:
+        return jsonify({'error': 'Invalid user or recipient ID'}), 404
+    
+    # Explicitly log what we're querying for
+    print(f"Fetching message history between user {user_id} and {recipient_id}")
+    
+    # Query database for messages between users (in either direction)
+    messages = Message.query.filter(
+        ((Message.sender_id == user_id) & (Message.recipient_id == recipient_id)) | 
+        ((Message.sender_id == recipient_id) & (Message.recipient_id == user_id))
+    ).order_by(Message.timestamp).all()
+    
+    # Convert to dictionary format
+    message_list = []
+    for message in messages:
+        message_dict = message.to_dict()
+        # Make sure recipient_id is included
+        if 'recipient_id' not in message_dict:
+            message_dict['recipient_id'] = message.recipient_id
+        message_list.append(message_dict)
+    
+    print(f"Found {len(message_list)} messages")
+    return jsonify(message_list), 200

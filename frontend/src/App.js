@@ -42,16 +42,24 @@ useEffect(() => {
 }, []);
 
 const connectSocket = (sessionId, userId) => {
-    socket = io(API_URL, {
+  socket = io(API_URL, {
     query: { 
-        session_id: sessionId,
-        user_id: userId
-    }
-    });
-    
-    socket.on('connect', () => {
+      session_id: sessionId,
+      user_id: userId
+    },
+    // Add this to fix reconnection issues
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5
+  });
+  
+  socket.on('connect', () => {
     console.log('Connected to WebSocket server with user ID:', userId);
-    });
+  });
+  
+  socket.on('connect_error', (error) => {
+    console.error('Socket connection error:', error);
+  });
 };
 
 const handleLogin = async (credentials) => {

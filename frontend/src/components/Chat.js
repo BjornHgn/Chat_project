@@ -38,166 +38,127 @@ function Chat({ user, socket, apiUrl }) {
     }
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch(`${apiUrl}/api/auth/users`);
-      if (response.ok) {
-        const data = await response.json();
-        // Filter out current user
-        setUsers(data.filter(u => u.id !== user.id));
-      } else {
-        console.error('Failed to fetch users');
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    }
-  };
-
-  useEffect(() => {
-    // Fetch available users
-    fetchUsers();
-  }, []);
+// Add this function right after fetchUsers
+const selectUser = async (user) => {
+  // Save current messages to cache before switching
+  if (selectedUser && messages.length > 0) {
+    setMessageCache(prevCache => ({
+      ...prevCache,
+      [selectedUser.id]: messages
+    }));
+  }
   
-  useEffect(() => {
-    // Clear previous listeners to prevent duplicates
-    socket.off('message');
+  // Set the new selected user
+  setSelectedUser(user);
+  
+  // Check if we have cached messages for this user
+  if (messageCache[user.id] && messageCache[user.id].length > 0) {
+    console.log("Loading messages from cache for", user.username);
+    setMessages(messageCache[user.id]);
+  } else {
+    // Clear messages when there's no cache
+    setMessages([]);
     
-    // Listen for incoming messages
-    socket.on('message', (data) => {
-      console.log("Received message:", data);
-      
-      // Only process messages that belong to the current conversation
-      if ((data.sender_id === selectedUser?.id && data.recipient_id === user.id) || 
-          (data.sender_id === user.id && data.recipient_id === selectedUser?.id)) {
+    // Only fetch message history if not in anonymous mode
+    if (!isAnonymousMode) {
+      try {
+        const currentUserId = user.user_id || user.id;
+        const response = await fetch(
+          `${apiUrl}/api/auth/history/${user.id}?user_id=${currentUserId}`
+        );
         
-        // Decrypt the message
-        const decryptedMessage = decryptMessage(data.encrypted_message);
-        
-        const newMessage = {
-          id: data.id || Date.now().toString(),
-          sender_id: data.sender_id,
-          recipient_id: data.recipient_id,
-          text: decryptedMessage,
-          timestamp: data.timestamp || new Date().toISOString(),
-        };
-        
-        // Add to current messages if this is the active conversation
-        setMessages((prevMessages) => [...prevMessages, newMessage]);
-        
-        // Always update the cache for the conversation partner
-        const conversationPartnerId = data.sender_id === user.id ? data.recipient_id : data.sender_id;
-        updateMessageCache(conversationPartnerId, newMessage);
-      } else if (data.recipient_id === user.id) {
-        // This is a message for you, but not from your currently selected user
-        // Just update the cache so it's available when you switch to that conversation
-        const decryptedMessage = decryptMessage(data.encrypted_message);
-        
-        const newMessage = {
-          id: data.id || Date.now().toString(),
-          sender_id: data.sender_id,
-          recipient_id: data.recipient_id,
-          text: decryptedMessage,
-          timestamp: data.timestamp || new Date().toISOString(),
-        };
-        
-        // Add to the cache but not to current view
-        updateMessageCache(data.sender_id, newMessage);
-      }
-    });
-    
-    return () => {
-      socket.off('message');
-    };
-  }, [selectedUser, user.id]);
-
-  // Modified updateMessageCache to ensure proper message ordering
-  const updateMessageCache = (userId, newMessage) => {
-    setMessageCache(prevCache => {
-      // Get existing cache for this user
-      const existingMessages = prevCache[userId] || [];
-      
-      // Check if message already exists in cache to prevent duplicates
-      const messageExists = existingMessages.some(msg => msg.id === newMessage.id);
-      
-      if (messageExists) {
-        return prevCache; // Don't update if message already exists
-      }
-      
-      // Add new message and sort by timestamp
-      const updatedMessages = [...existingMessages, newMessage]
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      
-      return {
-        ...prevCache,
-        [userId]: updatedMessages
-      };
-    });
-  };
-
-  // Fix selectUser function to properly store and retrieve cached messages
-  const selectUser = async (user) => {
-    // Save current messages to cache before switching
-    if (selectedUser && messages.length > 0) {
-      setMessageCache(prevCache => ({
-        ...prevCache,
-        [selectedUser.id]: messages
-      }));
-    }
-    
-    // Set the new selected user
-    setSelectedUser(user);
-    
-    // Check if we have cached messages for this user
-    if (messageCache[user.id] && messageCache[user.id].length > 0) {
-      setMessages(messageCache[user.id]);
-    } else {
-      // Clear messages when there's no cache
-      setMessages([]);
-      
-      // Only fetch message history if not in anonymous mode
-      if (!isAnonymousMode) {
-        try {
-          const response = await fetch(
-            `${apiUrl}/api/messages/history/${user.id}?user_id=${user.id}`
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Fetched message history:", data);
+          
+          // Filter messages to only show those between current user and selected user
+          const filteredData = data.filter(msg => 
+            (msg.sender_id === currentUserId && msg.recipient_id === user.id) || 
+            (msg.sender_id === user.id && msg.recipient_id === currentUserId)
           );
           
-          if (response.ok) {
-            const data = await response.json();
+          // Decrypt messages
+          const decryptedMessages = filteredData.map((msg) => {
+            let decryptedText;
+            try {
+              decryptedText = simplifiedDecrypt(msg.encrypted_message);
+            } catch (error) {
+              console.error("Error decrypting message:", error);
+              decryptedText = "[Encrypted message]";
+            }
             
-            // Filter messages to only show those between current user and selected user
-            const filteredData = data.filter(msg => 
-              (msg.sender_id === user.id && msg.recipient_id === user.id) || 
-              (msg.sender_id === user.id && msg.recipient_id === user.id)
-            );
-            
-            // Decrypt messages
-            const decryptedMessages = filteredData.map((msg) => ({
+            return {
               id: msg.id,
               sender_id: msg.sender_id,
-              recipient_id: msg.recipient_id || user.id, // Set recipient if missing
-              text: decryptMessage(msg.encrypted_message),
+              recipient_id: msg.recipient_id || user.id,
+              text: decryptedText,
               timestamp: msg.timestamp,
-            }));
-            
-            setMessages(decryptedMessages);
-            
-            // Also update cache
-            setMessageCache(prevCache => ({
-              ...prevCache,
-              [user.id]: decryptedMessages
-            }));
-          }
-        } catch (error) {
-          console.error('Error fetching message history:', error);
+            };
+          });
+          
+          console.log("Decrypted messages:", decryptedMessages);
+          setMessages(decryptedMessages);
+          
+          // Also update cache
+          setMessageCache(prevCache => ({
+            ...prevCache,
+            [user.id]: decryptedMessages
+          }));
         }
+      } catch (error) {
+        console.error('Error fetching message history:', error);
       }
     }
-  };
-
-  const signMessage = (message, key) => {
-  return CryptoJS.HmacSHA256(message, key).toString();
+  }
+  
+  // Scroll to bottom after selecting user (after messages load)
+  setTimeout(scrollToBottom, 200);
 };
 
+// Add this function to handle caching messages
+const updateMessageCache = (userId, newMessage) => {
+  setMessageCache(prevCache => {
+    // Get existing cache for this user
+    const existingMessages = prevCache[userId] || [];
+    
+    // Check if message already exists in cache to prevent duplicates
+    const messageExists = existingMessages.some(msg => msg.id === newMessage.id);
+    
+    if (messageExists) {
+      return prevCache; // Don't update if message already exists
+    }
+    
+    // Add new message and sort by timestamp
+    const updatedMessages = [...existingMessages, newMessage]
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    return {
+      ...prevCache,
+      [userId]: updatedMessages
+    };
+  });
+};
+
+// Add this function after fetchUserPublicKey and before selectUser
+const fetchUsers = async () => {
+  try {
+    const response = await fetch(`${apiUrl}/api/auth/users`);
+    if (response.ok) {
+      const data = await response.json();
+      // Filter out current user from the list
+      const currentUserId = user.user_id || user.id;
+      const filteredUsers = data.filter(u => u.id !== currentUserId);
+      setUsers(filteredUsers);
+      console.log("Fetched users:", filteredUsers);
+    } else {
+      console.error('Failed to fetch users');
+    }
+  } catch (error) {
+    console.error('Error fetching users:', error);
+  }
+};
+
+// Add this function to encrypt messages before sending
 const encryptMessageForSending = async (messageText) => {
   try {
     // Get recipient's public key
@@ -215,8 +176,8 @@ const encryptMessageForSending = async (messageText) => {
       if (currentUserKeys && currentUserKeys.privateKey) {
         // Use proper asymmetric encryption
         return encryptMessage(
-          messageText,
-                    recipientPublicKey, 
+          messageText, 
+          recipientPublicKey, 
           currentUserKeys.privateKey
         );
       }
@@ -231,66 +192,129 @@ const encryptMessageForSending = async (messageText) => {
   }
 };
 
-const decryptReceivedMessage = (encryptedText, senderId) => {
-  try {
-    // Get sender's public key
-    const senderPublicKey = getPublicKey(senderId);
-    const currentUserKeys = getCurrentUserKeys();
+  useEffect(() => {
+    // Fetch available users
+    fetchUsers();
+  }, []);
+  
+// Fix the useEffect hook for message reception
+useEffect(() => {
+  // Clear previous listeners to prevent duplicates
+  socket.off('message');
+  
+  // Listen for incoming messages
+  socket.on('message', (data) => {
+    console.log("Received message:", data);
     
-    // If we have both keys, use proper E2EE
-    if (senderPublicKey && currentUserKeys && currentUserKeys.privateKey) {
-      return decryptMessage(
-        encryptedText,
-        senderPublicKey,
-        currentUserKeys.privateKey
-      );
+    // Make sure we have the current user's ID in a consistent format
+    const currentUserId = user.user_id || user.id;
+    
+    // Check if this message is intended for the current user
+    if (data.recipient_id === currentUserId) {
+      try {
+        // Try to decrypt with proper E2EE if available
+        let decryptedText;
+        try {
+          const senderPublicKey = getPublicKey(data.sender_id);
+          const currentUserKeys = getCurrentUserKeys();
+          
+          if (senderPublicKey && currentUserKeys && currentUserKeys.privateKey) {
+            decryptedText = decryptMessage(
+              data.encrypted_message,
+              senderPublicKey,
+              currentUserKeys.privateKey
+            );
+          } else {
+            // Fallback to simplified decryption
+            decryptedText = simplifiedDecrypt(data.encrypted_message);
+          }
+        } catch (error) {
+          console.error("Decryption error:", error);
+          // Fallback to simplified decryption as last resort
+          decryptedText = simplifiedDecrypt(data.encrypted_message);
+        }
+        
+        // Format the new message
+        const newMessage = {
+          id: data.id || Date.now().toString(),
+          sender_id: data.sender_id,
+          recipient_id: data.recipient_id,
+          text: decryptedText,
+          timestamp: data.timestamp || new Date().toISOString(),
+        };
+        
+        console.log("Decrypted message:", newMessage);
+        
+        // If this is a message from the currently selected user, add it to the chat
+        if (selectedUser && data.sender_id === selectedUser.id) {
+          console.log("Adding message to current conversation");
+          setMessages(prevMessages => [...prevMessages, newMessage]);
+          
+          // Scroll to the bottom to show the new message
+          setTimeout(scrollToBottom, 100);
+        }
+        
+        // Always cache the message
+        updateMessageCache(data.sender_id, newMessage);
+      } catch (error) {
+        console.error("Error processing received message:", error);
+      }
     }
-    
-    // Fallback to simplified decryption
-    console.warn('Using simplified decryption as fallback');
-    return simplifiedDecrypt(encryptedText);
-  } catch (error) {
-    console.error('Decryption error, falling back to simple decryption:', error);
-    return simplifiedDecrypt(encryptedText);
-  }
+  });
+  
+  return () => {
+    socket.off('message');
   };
+}, [selectedUser, user]);
 
+// Update the sendMessage function to include both user ID formats
 const sendMessage = async () => {
   if (!message.trim() || !selectedUser) return;
+  
+  // Get the current user ID (handling both formats)
+  const currentUserId = user.user_id || user.id;
   
   // Add debug logs
   console.log("Current user:", user);
   console.log("Selected user:", selectedUser);
+  
+  // Create a unique message ID
+  const messageId = Date.now().toString();
   
   // Encrypt the message
   const encryptedMessage = await encryptMessageForSending(message);
   
   // Prepare message data
   const messageData = {
-    sender_id: user.user_id || user.id, // Try both possible fields
+    id: messageId,
+    sender_id: currentUserId,
     recipient_id: selectedUser.id,
     encrypted_message: encryptedMessage,
     store_history: !isAnonymousMode, // Don't store if in anonymous mode
+    timestamp: new Date().toISOString()
   };
   
   console.log("Sending message data:", messageData);
   
-  // Send through WebSocket
+  // Add to local messages first (for immediate feedback)
+  const newMessage = {
+    id: messageId,
+    sender_id: currentUserId,
+    recipient_id: selectedUser.id,
+    text: message,
+    timestamp: new Date().toISOString(),
+  };
+  
+  setMessages(prevMessages => [...prevMessages, newMessage]);
+  
+  // Then send through WebSocket
   socket.emit('message', messageData);
-    
-  // Add to local messages
-  setMessages((prevMessages) => [
-    ...prevMessages,
-    {
-      id: Date.now().toString(),
-      sender_id: user.id,
-      text: message,
-      timestamp: new Date().toISOString(),
-    },
-  ]);
   
   // Clear input
   setMessage('');
+  
+  // Scroll to the bottom to show the new message
+  setTimeout(scrollToBottom, 100);
 };
 
   const scrollToBottom = () => {
@@ -336,7 +360,7 @@ const sendMessage = async () => {
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`message ${msg.sender_id === user.id ? 'sent' : 'received'}`}
+                  className={`message ${msg.sender_id === (user.user_id || user.id) ? 'sent' : 'received'}`}
                 >
                   <div className="message-content">{msg.text}</div>
                   <div className="message-time">
